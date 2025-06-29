@@ -2,7 +2,7 @@ import { parse } from 'acorn'
 import { walk } from 'estree-walker'
 import { generate } from 'astring'
 import { builders } from 'ast-types'
-import { VirtualConsole } from '@steve02081504/virtual-console'
+const is_browser = await import('node:console').then(x => 1).catch(x => 0)
 
 /**
  * Asynchronously evaluates JavaScript code with optional arguments and a virtual console for output.
@@ -117,19 +117,21 @@ export async function async_eval(code, args = {}) {
 				}
 			},
 		})
-
-		args.console ??= new VirtualConsole({ realConsoleOutput: true })
-		const result = await args.console.hookAsyncContext(
-			(async x => x).constructor(...Object.keys(args), generate(ast))(...Object.values(args))
-		)
+		const base_fn = (async x => x).constructor(...Object.keys(args), generate(ast))(...Object.values(args))
+		let fn = base_fn
+		if (!is_browser) {
+			args.console ??= new VirtualConsole({ realConsoleOutput: true })
+			fn = () => args.console.hookAsyncContext(base_fn)
+		}
+		const result = await fn()
 		args.eval_result = {
 			result,
-			output: args.console.outputs
+			output: args.console?.outputs
 		}
 	} catch (error) {
 		args.eval_result = {
 			error,
-			output: args.console.outputs
+			output: args.console?.outputs
 		}
 	}
 	return args.eval_result
