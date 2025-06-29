@@ -119,10 +119,11 @@ export async function async_eval(code, args = {}) {
 		})
 		const base_fn = (async x => x).constructor(...Object.keys(args), generate(ast))(...Object.values(args))
 		let fn = base_fn
-		if (!is_browser) {
+		if (!is_browser) try {
+			const { VirtualConsole } = await import('@steve02081504/virtual-console')
 			args.console ??= new VirtualConsole({ realConsoleOutput: true })
 			fn = () => args.console.hookAsyncContext(base_fn)
-		}
+		} catch (error) {}
 		const result = await fn()
 		args.eval_result = {
 			result,
