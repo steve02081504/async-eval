@@ -1,7 +1,7 @@
 import { parse } from 'acorn'
 import { walk } from 'estree-walker'
 import { generate } from 'astring'
-import { builders } from 'ast-types'
+import { builders } from 'ast-types-x'
 const is_browser = await import('node:console').then(x => 1).catch(x => 0)
 
 /**
@@ -117,7 +117,7 @@ export async function async_eval(code, args = {}) {
 				}
 			},
 		})
-		const base_fn = (async x => x).constructor(...Object.keys(args), generate(ast))(...Object.values(args))
+		const base_fn = () => (async x => x).constructor(...Object.keys(args), generate(ast))(...Object.values(args))
 		let fn = base_fn
 		if (!is_browser) try {
 			const { VirtualConsole } = await import('@steve02081504/virtual-console')
