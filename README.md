@@ -20,6 +20,12 @@ Install the package using npm:
 npm install @steve02081504/async-eval
 ```
 
+for deno user, you can use `deno.mjs` to get an better compatibility with `node-modules-dir=auto`:
+
+```mjs
+import { async_eval } from 'https://cdn.jsdelivr.net/gh/steve02081504/async-eval/deno.mjs';
+```
+
 ## Usage
 
 Here's a simple example of how to use `async-eval`:
