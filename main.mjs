@@ -116,7 +116,8 @@ export async function async_eval(code, args = {}) {
 				}
 			},
 		})
-		const base_fn = () => (async x => x).constructor(...Object.keys(args), generate(ast))(...Object.values(args))
+		const scriptPolicy = globalThis.trustedTypes?.createPolicy?.('async-eval-policy', { createScript: (input) => input }) ?? { createScript: input => input }
+		const base_fn = () => (async x => x).constructor(...Object.keys(args), scriptPolicy.createScript(generate(ast)))(...Object.values(args))
 		let fn = base_fn
 		try {
 			const { VirtualConsole } = await import('@steve02081504/virtual-console')
