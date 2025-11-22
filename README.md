@@ -1,6 +1,6 @@
 # async-eval
 
-[![npm version](https://badge.fury.io/js/@steve02081504/async-eval.svg)](https://badge.fury.io/js/@steve02081504/async-eval)
+[![npm version](https://badge.fury.io/js/@steve02081504%2Fasync-eval.svg)](https://badge.fury.io/js/@steve02081504%2Fasync-eval)
 
 `async-eval` is a powerful JavaScript utility that asynchronously evaluates code strings. It enhances the standard `eval` by providing support for modern JavaScript features like top-level `import`, implicit returns, and a sandboxed virtual console for capturing logs.
 
