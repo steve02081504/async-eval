@@ -1,6 +1,6 @@
 {
 	"name": "@steve02081504/async-eval",
-	"version": "0.0.5",
+	"version": "0.0.6",
 	"description": "Asynchronously evaluates JavaScript code with support for top-level await, implicit returns, and a virtual console.",
 	"main": "main.mjs",
 	"type": "module",

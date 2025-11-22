@@ -3,6 +3,8 @@ import { walk } from 'estree-walker'
 import { generate } from 'astring'
 import { builders } from 'ast-types-x'
 
+const scriptPolicy = globalThis.trustedTypes?.createPolicy?.('async-eval-policy', { createScript: (input) => input }) ?? { createScript: input => input }
+
 /**
  * Asynchronously evaluates JavaScript code with optional arguments and a virtual console for output.
  *
@@ -116,7 +118,6 @@ export async function async_eval(code, args = {}) {
 				}
 			},
 		})
-		const scriptPolicy = globalThis.trustedTypes?.createPolicy?.('async-eval-policy', { createScript: (input) => input }) ?? { createScript: input => input }
 		const base_fn = () => (async x => x).constructor(...Object.keys(args), scriptPolicy.createScript(generate(ast)))(...Object.values(args))
 		let fn = base_fn
 		try {
@@ -127,12 +128,14 @@ export async function async_eval(code, args = {}) {
 		const result = await fn()
 		args.eval_result = {
 			result,
-			output: args.console?.outputs
+			output: args.console?.outputs,
+			outputHtml: args.console?.outputsHtml
 		}
 	} catch (error) {
 		args.eval_result = {
 			error,
-			output: args.console?.outputs
+			output: args.console?.outputs,
+			outputHtml: args.console?.outputsHtml
 		}
 	}
 	return args.eval_result

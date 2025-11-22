@@ -126,12 +126,14 @@ export async function async_eval(code, args = {}) {
 		const result = await fn()
 		args.eval_result = {
 			result,
-			output: args.console?.outputs
+			output: args.console?.outputs,
+			outputHtml: args.console?.outputsHtml
 		}
 	} catch (error) {
 		args.eval_result = {
 			error,
-			output: args.console?.outputs
+			output: args.console?.outputs,
+			outputHtml: args.console?.outputsHtml
 		}
 	}
 	return args.eval_result
