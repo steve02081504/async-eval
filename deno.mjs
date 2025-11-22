@@ -1,15 +1,22 @@
-import { parse } from 'npm:acorn'
-import { walk } from 'npm:estree-walker'
-import { generate } from 'npm:astring'
-import { builders } from 'npm:ast-types-x'
 import { VirtualConsole } from 'npm:@steve02081504/virtual-console'
+import { parse } from 'npm:acorn'
+import { builders } from 'npm:ast-types-x'
+import { generate } from 'npm:astring'
+import { walk } from 'npm:estree-walker'
+
+import { EvalResult } from './eval-result.mjs'
 
 /**
- * Asynchronously evaluates JavaScript code with optional arguments and a virtual console for output.
+ * 重新导出 `EvalResult`。
+ */
+export { EvalResult } from './eval-result.mjs'
+
+/**
+ * 异步求值 JavaScript 代码，支持可选参数注入与虚拟控制台输出捕获。
  *
- * @param {string} code - The JavaScript code to be evaluated.
- * @param {object} [args={}] - An optional object containing arguments to be used within the code.
- * @returns {Promise<{result?: any; output: string; error?: Error}>} A promise that resolves to an object containing either the result of the evaluation or an error if one occurred, along with any console output.
+ * @param {string} code - 待求值的 JavaScript 代码。
+ * @param {object} [args={}] - 可选的参数对象，将作为求值环境中的变量注入。
+ * @returns {Promise<import('./eval-result.mjs').EvalResult>} 解析为 `EvalResult`，包含 `result`、`error` 及本次求值的 `outputEntries`；`output` 与 `outputHtml` 为基于这些条目的 getter。
  */
 export async function async_eval(code, args = {}) {
 	try {
@@ -20,7 +27,15 @@ export async function async_eval(code, args = {}) {
 		})
 
 		walk(ast, {
-			enter(/** @type {import('npm:estree').Node} */ node, parent, prop, index) {
+			/**
+			 * 重写 import、移除 export，并追加隐式 return。
+			 *
+			 * @param {import('npm:estree').Node} node - 当前正在访问的 AST 节点。
+			 * @param {import('npm:estree').Node | null} parent - 父节点（若有）。
+			 * @param {string | null} prop - 父节点上引用本节点的属性名。
+			 * @param {number | null} index - 节点位于数组中时的下标。
+			 */
+			enter(node, parent, prop, index) {
 				// 将 import xxx from 'module' 转换为 const { xxx } = await import('module')
 				if (node.type === 'ImportDeclaration') {
 					const dynamicImportCall = builders.awaitExpression(
@@ -117,24 +132,34 @@ export async function async_eval(code, args = {}) {
 				}
 			},
 		})
+		/**
+		 * 运行转换后的模块体，并注入参数绑定。
+		 *
+		 * @returns {Promise<unknown>} 求值的返回值或抛出的 rejection。
+		 */
 		const base_fn = () => (async x => x).constructor(...Object.keys(args), generate(ast))(...Object.values(args))
 		let fn = base_fn
 		try {
-			args.console ??= new VirtualConsole({ realConsoleOutput: true })
+			// deno和node的内置 Console 的 Symbol.hasInstance 未处理 undefined 的情况
+			if (args.console === undefined)
+				args.console = new VirtualConsole({ realConsoleOutput: true })
+			else if (!(args.console instanceof VirtualConsole))
+				args.console = new VirtualConsole({ realConsoleOutput: true, baseConsole: args.console })
+			/**
+			 * 将求值期间的 `console` 调用路由至虚拟控制台。
+			 *
+			 * @returns {Promise<unknown>} 求值的返回值或抛出的 rejection。
+			 */
 			fn = () => args.console.hookAsyncContext(base_fn)
 		} catch (error) {}
-		const result = await fn()
-		args.eval_result = {
-			result,
-			output: args.console?.outputs,
-			outputHtml: args.console?.outputsHtml
-		}
+		const logsBeforeEval = args.console.outputEntries.length ?? 0
+		return await fn().then(
+			result => ({ result }), error => ({ error }),
+		).then(result => new EvalResult({
+			...result,
+			outputEntries: args.console.outputEntries.slice(logsBeforeEval),
+		}))
 	} catch (error) {
-		args.eval_result = {
-			error,
-			output: args.console?.outputs,
-			outputHtml: args.console?.outputsHtml
-		}
+		return new EvalResult({ error, outputEntries: [] })
 	}
-	return args.eval_result
 }

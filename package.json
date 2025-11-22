@@ -1,6 +1,6 @@
 {
 	"name": "@steve02081504/async-eval",
-	"version": "0.0.6",
+	"version": "0.0.7",
 	"description": "Asynchronously evaluates JavaScript code with support for top-level await, implicit returns, and a virtual console.",
 	"main": "main.mjs",
 	"type": "module",
@@ -15,6 +15,9 @@
 		"url": "https://github.com/steve02081504/async-eval/issues"
 	},
 	"homepage": "https://github.com/steve02081504/async-eval#readme",
+	"scripts": {
+		"test": "node test/runner.mjs"
+	},
 	"dependencies": {
 		"acorn": "latest",
 		"ast-types-x": "latest",

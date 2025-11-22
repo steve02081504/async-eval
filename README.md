@@ -1,21 +1,24 @@
 # async-eval
 
-[![npm version](https://badge.fury.io/js/@steve02081504/async-eval.svg)](https://badge.fury.io/js/@steve02081504/async-eval)
+[![npm version](https://badge.fury.io/js/@steve02081504%2Fasync-eval.svg)](https://badge.fury.io/js/@steve02081504%2Fasync-eval)
 
-`async-eval` is a powerful JavaScript utility that asynchronously evaluates code strings. It enhances the standard `eval` by providing support for modern JavaScript features like top-level `import`, implicit returns, and a sandboxed virtual console for capturing logs.
+`async-eval` is a powerful JavaScript utility that asynchronously evaluates code strings. It enhances the standard `eval` by providing support for modern JavaScript features like top-level `import`, implicit returns, and a virtual console for capturing logs.
+
+## Used by
+
+- [GentianAphrodite](https://github.com/steve02081504/GentianAphrodite)
+- [fount](https://github.com/steve02081504/fount)
 
 ## Features
 
 - **Asynchronous Evaluation**: Evaluates code without blocking the main thread using `AsyncFunction`.
 - **ESM Import Support**: Automatically transforms static `import` statements into dynamic `await import()` expressions, supporting default, named, and namespace imports.
 - **Implicit Return**: Automatically returns the value of the last expression or variable declaration, similar to a browser's developer console.
-- **Virtual Console**: Captures all `console` output (`log`, `warn`, `error`, `info`, etc.) and provides both raw text and HTML formatted output with ANSI color and `%c` styling support.
+- **Virtual Console**: Captures all `console` output (`log`, `warn`, `error`, `info`, etc.) and exposes structured [`LogEntry`](https://github.com/steve02081504/virtual-console#results-api) objects, plus aggregated plain-text (`output`) and HTML (`outputHtml`) views—derived from entries on access—with ANSI color and `%c` styling support.
 - **Trusted Types Support**: Utilizes `trustedTypes` (if available) to create script policies, making it friendlier for environments with strict Content Security Policies (CSP).
-- **Argument Injection**: Inject variables into the evaluation context.
+- **Argument Injection**: Bindings from the second argument are available in evaluated code.
 
 ## Installation
-
-Install the package using npm:
 
 ```bash
 npm install @steve02081504/async-eval
@@ -32,7 +35,7 @@ import { async_eval } from 'https://cdn.jsdelivr.net/gh/steve02081504/async-eval
 
 ## Usage
 
-Here's a comprehensive example of how to use `async-eval`:
+`async_eval(code)` asynchronously evaluates a string and yields an `EvalResult` holding the return value, any error, and captured console output:
 
 ```javascript
 import { async_eval } from '@steve02081504/async-eval';
@@ -46,22 +49,25 @@ a + b; // Implicit return
 `;
 
 async function run() {
-	// The return object contains result, output (array), outputHtml (array), and error (if any)
-	const { result, output, outputHtml, error } = await async_eval(code);
+	const evalResult = await async_eval(code);
+	const { result, outputEntries, output, outputHtml, error } = evalResult;
 
 	if (error) {
 		console.error('Evaluation failed:', error);
 	} else {
 		console.log('--- Evaluation Result ---');
 		console.log(result); // Output: 15
-		
+
+		console.log('--- Captured Console Output (Structured) ---');
+		console.log(outputEntries.map(e => ({ level: e.level, text: e.toPlainText() })));
+		// Output: [{ level: 'log', text: 'Hello from the evaluated code!\n' }, { level: 'warn', text: 'This is a warning\n' }]
+
 		console.log('--- Captured Console Output (Text) ---');
-		console.log(output); 
-		// Output: ['Hello from the evaluated code!', 'This is a warning']
-		
+		console.log(output);
+		// Output: 'Hello from the evaluated code!\nThis is a warning\n'
+
 		console.log('--- Captured Console Output (HTML) ---');
 		console.log(outputHtml);
-		// Useful for displaying logs in a web UI
 	}
 }
 
@@ -91,7 +97,7 @@ const { result, output } = await async_eval(codeWithImport);
 
 ### Injecting Arguments and Context
 
-You can pass arguments to the evaluation context. This is useful for exposing variables or functions to the evaluated code.
+Pass a second argument to expose bindings inside the evaluated code:
 
 ```javascript
 const code = 'x * y + helper(z)';
@@ -108,7 +114,7 @@ console.log(result); // -> 54 (10 * 5 + 2 * 2)
 
 ### Advanced: Custom Console
 
-By default, `async-eval` creates a new [`VirtualConsole` instance](https://github.com/steve02081504/virtual-console). You can pass your own console instance (or reuse one) via the `console` property in arguments.
+By default, `async-eval` provisions a fresh [`VirtualConsole`](https://github.com/steve02081504/virtual-console). Supply your own via `{ console: ... }` to share one across multiple evaluations:
 
 ```javascript
 import { VirtualConsole } from '@steve02081504/virtual-console';
@@ -119,21 +125,96 @@ const args = { console: myConsole };
 await async_eval("console.log('Session 1')", args);
 await async_eval("console.log('Session 2')", args);
 
-console.log(myConsole.outputs); // Contains logs from both sessions
+console.log(myConsole.outputEntries.length); // entries from both sessions
+console.log(myConsole.outputs);              // plain-text aggregation on the shared console
 ```
+
+### Advanced: Structured output for frontends
+
+For UI rendering (log levels, per-line HTML, stack traces), iterate **`outputEntries`**—the same shape as [`VirtualConsole.outputEntries`](https://github.com/steve02081504/virtual-console#results-api). Reach for **`output`** or **`outputHtml`** when a single joined string is enough:
+
+```javascript
+const { result, outputEntries, error } = await async_eval(`
+  console.log('step 1');
+  console.warn('slow path');
+  42;
+`);
+
+if (!error) {
+  for (const entry of outputEntries) {
+    // entry.level, entry.method, entry.stack, entry.toHtml(), …
+    document.body.insertAdjacentHTML('beforeend', entry.toHtml());
+  }
+}
+```
+
+Each `LogEntry` supports `toPlainText()`, `toString()` (ANSI), `toHtml()`, `toSegments()`, and `serializeArgs()` — see the [virtual-console Results API](https://github.com/steve02081504/virtual-console#results-api) for the full surface.
+
+When a `VirtualConsole` is shared across calls, each `EvalResult` still scopes `outputEntries`, `output`, and `outputHtml` to that evaluation alone.
+
+### Remote display (JSON / WebSocket)
+
+Wire and serialization helpers live in [`@steve02081504/virtual-console`](https://github.com/steve02081504/virtual-console) — the same tools that power log wire and DevTools-style rendering.
+
+**Server: build a JSON payload**
+
+```javascript
+import { async_eval } from '@steve02081504/async-eval';
+import { serializeArgSnapshot } from '@steve02081504/virtual-console/node';
+
+const { result, error, outputEntries } = await async_eval(`
+  console.log({ ok: true });
+  ({ n: 1 });
+`);
+
+const payload = {
+  outputEntries: outputEntries.map(entry => entry.toJSON()),
+  ...(result !== undefined && { result: serializeArgSnapshot(result) }),
+  ...(error !== undefined && { error: serializeArgSnapshot(error) }),
+};
+
+const json = JSON.stringify(payload);
+```
+
+- **`outputEntries`** — `LogEntry#toJSON()`; same shape as [log wire](https://github.com/steve02081504/virtual-console#log-wire-protocol-websocket-json) `vc_log_append`.
+- **`result` / `error`** — `serializeArgSnapshot` produces [`ArgSnapshot`](https://github.com/steve02081504/virtual-console#typescript) trees safe for JSON. Pass `{ maxDepth: 4 }` as the second argument to cap depth; deep graphs may emit `truncated` refs expandable via `vc_expand_request` / `expandSnapshotRef`.
+
+**Client: render logs and return value**
+
+```javascript
+import { WireLogEntry } from '@steve02081504/virtual-console/wire/client';
+import { renderHtml } from '@steve02081504/virtual-console/browser';
+
+const payload = JSON.parse(json);
+
+for (const entryJson of payload.outputEntries) {
+  const wire = new WireLogEntry(entryJson, { requestExpand: async () => null });
+  document.body.insertAdjacentHTML('beforeend', await wire.renderHtml());
+}
+
+if (payload.result)
+  document.body.insertAdjacentHTML('beforeend', renderHtml([{ kind: 'value', snapshot: payload.result }]));
+```
+
+For live streaming instead of one-shot payloads, mount [`createLogWireWebSocketHandler`](https://github.com/steve02081504/virtual-console#log-wire-protocol-websocket-json) on a shared `VirtualConsole` and pass that console into `async_eval` via `{ console: myConsole }`.
 
 ## Return Value
 
-The `async_eval` function returns a Promise that resolves to an object with the following structure:
+`async_eval` resolves to an **`EvalResult`**:
 
 ```typescript
-{
-	result?: any;          // The return value of the last executed statement
-	output: string[];      // Array of console log strings
-	outputHtml: string[];  // Array of console logs formatted as HTML strings
-	error?: Error;         // The error object if evaluation failed
+class EvalResult {
+	result?: any;               // return value when evaluation succeeds
+	error?: Error;              // populated when evaluation fails
+	outputEntries: LogEntry[];  // this eval's log entries only
+	get output(): string;       // plain/ANSI text joined from outputEntries
+	get outputHtml(): string;   // HTML joined from outputEntries
 }
 ```
+
+`output` and `outputHtml` aggregate the snapshotted entries on read—they are not computed until accessed.
+
+For cross-network payloads, serialize `outputEntries` with `LogEntry#toJSON()` and `result` / `error` with `serializeArgSnapshot` from `@steve02081504/virtual-console/node` or `/browser` — see [Remote display](#remote-display-json--websocket). Import `LogEntry` types from the same package.
 
 ## How It Works
 
@@ -145,7 +226,7 @@ The `async_eval` function returns a Promise that resolves to an object with the 
 3. **Generation**: The modified AST is converted back to JavaScript code using `astring`.
 4. **Trusted Types**: If available, a `trustedTypes` policy named `async-eval-policy` is created to sanitize the script generation.
 5. **Execution**: The code is executed using the `AsyncFunction` constructor (`(async x => x).constructor`).
-6. **Sandboxing**: A `VirtualConsole` is hooked into the async context to capture logs specifically for that execution.
+6. **Console capture**: A `VirtualConsole` is hooked into the async context to capture logs for that execution.
 
 ## Environment Differences
 
