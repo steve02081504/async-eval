@@ -11,6 +11,28 @@ import { EvalResult } from './eval-result.mjs'
  */
 export { EvalResult } from './eval-result.mjs'
 
+const parseOptions = {
+	ecmaVersion: 'latest',
+	sourceType: 'module',
+	allowReturnOutsideFunction: true,
+}
+
+/**
+ * 若源码片段在表达式语境下为对象字面量，则解析并返回对应 AST 节点。
+ *
+ * @param {string} source - 待探测的源码片段。
+ * @returns {import('npm:estree').ObjectExpression | null} 对象字面量节点，或 `null`。
+ */
+function parseObjectLiteralExpression(source) {
+	try {
+		const probe = parse(`(${source.trim()})`, parseOptions)
+		const stmt = probe.body[0]
+		if (stmt?.type === 'ExpressionStatement')
+			return stmt.expression
+	} catch {}
+	return null
+}
+
 /**
  * 异步求值 JavaScript 代码，支持可选参数注入与虚拟控制台输出捕获。
  *
@@ -20,11 +42,7 @@ export { EvalResult } from './eval-result.mjs'
  */
 export async function async_eval(code, args = {}) {
 	try {
-		const ast = parse(code, {
-			ecmaVersion: 'latest',
-			sourceType: 'module',
-			allowReturnOutsideFunction: true,
-		})
+		const ast = parse(code, parseOptions)
 
 		walk(ast, {
 			/**
@@ -45,7 +63,7 @@ export async function async_eval(code, args = {}) {
 						)
 					)
 
-					if (node.specifiers && node.specifiers.length > 0) {
+					if (node.specifiers?.length) {
 						let hasNamespace = false
 						const properties = []
 
@@ -81,7 +99,7 @@ export async function async_eval(code, args = {}) {
 									)
 								)
 
-						if (!hasNamespace && properties.length > 0) {
+						if (!hasNamespace && properties.length) {
 							// const { default: D, X, Y: Z } = await import('...');
 							const declaration = builders.variableDeclaration('const', [
 								builders.variableDeclarator(
@@ -109,10 +127,7 @@ export async function async_eval(code, args = {}) {
 						this.skip()
 
 				// 添加隐式 return
-				else if (
-					node.type === 'Program' &&
-					!node.body.some(n => n.type === 'ReturnStatement')
-				) {
+				else if (node.type === 'Program') {
 					const lastStatement = node.body[node.body.length - 1]
 					switch (lastStatement.type) {
 						case 'ExpressionStatement':
@@ -121,13 +136,22 @@ export async function async_eval(code, args = {}) {
 								lastStatement.expression,
 							)
 							break
-						case 'VariableDeclaration':
+						case 'VariableDeclaration': {
 							// const a = 1; => const a = 1; return a;
 							const lastDeclaration = lastStatement.declarations[lastStatement.declarations.length - 1]
 							if (lastDeclaration.init && lastDeclaration.id.type === 'Identifier')
 								node.body.push(builders.returnStatement(lastDeclaration.id))
 
 							break
+						}
+						case 'BlockStatement': {
+							// 1; {a:{}} => 1; return {a:{}}
+							const objectLiteral = parseObjectLiteralExpression(code.slice(lastStatement.start, lastStatement.end))
+							if (objectLiteral)
+								node.body[node.body.length - 1] = builders.returnStatement(objectLiteral)
+
+							break
+						}
 					}
 				}
 			},

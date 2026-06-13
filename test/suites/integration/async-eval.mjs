@@ -30,6 +30,15 @@ async function testImplicitReturn() {
 
 	const explicit = await async_eval('return 99;', { console: quietConsole() })
 	assertEqual(explicit.result, 99, '显式 return 仍然有效')
+
+	const objectLiteral = await async_eval('{a:{}}', { console: quietConsole() })
+	assertEqual(JSON.stringify(objectLiteral.result), JSON.stringify({ a: {} }), '顶层 {a:{}} 解析为对象字面量而非块语句')
+
+	const commentedObjectLiteral = await async_eval('/*a*/{a:{}}', { console: quietConsole() })
+	assertEqual(JSON.stringify(commentedObjectLiteral.result), JSON.stringify({ a: {} }), '前导注释后的对象字面量仍可隐式返回')
+
+	const trailingObjectLiteral = await async_eval('1;{a:{}}', { console: quietConsole() })
+	assertEqual(JSON.stringify(trailingObjectLiteral.result), JSON.stringify({ a: {} }), '多语句时最后一条对象字面量仍可隐式返回')
 }
 
 /**
@@ -115,7 +124,7 @@ import { sep } from 'path';
 sep;
 `, { console: quietConsole() })
 	assert(typeof named.result === 'string', '命名导入 path.sep 为字符串')
-	assert(named.result.length > 0, 'path.sep 非空')
+	assert(named.result.length, 'path.sep 非空')
 
 	const namespace = await async_eval(`\
 import * as url from 'url';

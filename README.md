@@ -24,6 +24,37 @@
 npm install @steve02081504/async-eval
 ```
 
+### Interactive REPL
+
+An interactive REPL is included for exploring `async_eval` in the terminal (Node.js only).
+
+```bash
+# from the package root after install
+npm run repl
+# or
+node scripts/repl.mjs
+```
+
+Each input line is evaluated with the same semantics as `async_eval`: top-level `await`, static `import`, implicit return, and virtual `console` capture.
+
+After each evaluation, the REPL prints separate blocks for:
+
+- **Captured console (ANSI)** — colored output from `VirtualConsole` (`output`)
+- **Captured console (plain)** — plain-text logs via `LogEntry#toPlainText()`
+- **Captured console (HTML)** — joined HTML (`outputHtml`)
+- **Error** — when evaluation throws or fails to parse
+- **Result** — the return value, formatted with `util.inspect` (colors enabled)
+
+Use the REPL variable `args` to inject bindings (same as the second argument to `async_eval`):
+
+```
+ae> args.x = 10
+ae> args.y = 5
+ae> x * y
+```
+
+Exit with `.exit` or Ctrl+D.
+
 ### For Deno Users
 
 For Deno, a specific entry point `deno.mjs` is provided which uses static imports for better compatibility with Deno's handling of npm specifiers.
