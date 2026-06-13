@@ -7,5 +7,15 @@
 export function importPackage(specifier) {
 	if (globalThis.Deno)
 		return import(`npm:${specifier}`).catch(() => import(specifier))
+	if (globalThis.document)
+		switch (import.meta.url.hostname) {
+			case 'cdn.jsdelivr.net':
+				return import(`https://cdn.jsdelivr.net/npm/${specifier}`)
+			case 'unpkg.com':
+				return import(`https://unpkg.com/${specifier}`)
+			default:
+			case 'esm.sh':
+				return import(`https://esm.sh/${specifier}`)
+		}
 	return import(specifier)
 }
