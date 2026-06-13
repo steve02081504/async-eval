@@ -47,7 +47,7 @@ const inspectOptions = {
 
 /**
  * 打印单次 `async_eval` 的 `EvalResult` 各视图。
- * @param {import('../eval-result.mjs').EvalResult} evalResult - 求值结果。
+ * @param {import('../lib/eval_result.mjs').EvalResult} evalResult - 求值结果。
  */
 function displayEvalResult(evalResult) {
 	const { result, error, outputEntries, output, outputHtml } = evalResult

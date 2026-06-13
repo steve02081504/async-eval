@@ -39,6 +39,24 @@ async function testImplicitReturn() {
 
 	const trailingObjectLiteral = await async_eval('1;{a:{}}', { console: quietConsole() })
 	assertEqual(JSON.stringify(trailingObjectLiteral.result), JSON.stringify({ a: {} }), '多语句时最后一条对象字面量仍可隐式返回')
+
+	const nestedInput = '{a:{a:{a:{a:{a:{a:{a:{a:{a:{a:{a:{}}}}}}}}}}}}'
+	const nestedDepth = (nestedInput.match(/a:/g) ?? []).length
+	let nestedExpected = {}
+	for (let i = 0; i < nestedDepth; i++)
+		nestedExpected = { a: nestedExpected }
+	const nestedObjectLiteral = await async_eval(nestedInput, { console: quietConsole() })
+	assertEqual(JSON.stringify(nestedObjectLiteral.result), JSON.stringify(nestedExpected), '深层嵌套 {a:{a:...}} 解析为对象字面量')
+
+	const trailingNestedObjectLiteral = await async_eval('1;{a:{a:{}}}', { console: quietConsole() })
+	assertEqual(JSON.stringify(trailingNestedObjectLiteral.result), JSON.stringify({ a: { a: {} } }), '多语句时深层嵌套对象字面量仍可隐式返回')
+
+	const semicolonInString = await async_eval(
+		"await import('node:assert');/*a*/1;{a:{a:{a:{a:{a:{a:{a:{a:{a:{a:{a:[1,'}}}}}']}}}}}}}}}}}/*}*/;/*;*/",
+		{ console: quietConsole() },
+	)
+	assertEqual(semicolonInString.error, undefined, '字符串与注释内的分号不干扰语句切分')
+	assert(Array.isArray(semicolonInString.result?.a?.a?.a?.a?.a?.a?.a?.a?.a?.a?.a), '复杂末尾对象字面量可隐式返回')
 }
 
 /**

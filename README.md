@@ -57,11 +57,28 @@ Exit with `.exit` or Ctrl+D.
 
 ### For Deno Users
 
-For Deno, a specific entry point `deno.mjs` is provided which uses static imports for better compatibility with Deno's handling of npm specifiers.
+Deno uses the same entry point as Node.js (`main.mjs`). Which module specifiers work inside evaluated code depends on how you import the library:
+
+**CDN import**
+
+When loading from a CDN URL, use `npm:` prefixes in code passed to `async_eval`:
 
 ```javascript
-// Using jsDelivr
-import { async_eval } from 'https://cdn.jsdelivr.net/gh/steve02081504/async-eval/deno.mjs';
+import { async_eval } from 'https://cdn.jsdelivr.net/gh/steve02081504/async-eval/main.mjs';
+
+await async_eval('import { VirtualConsole } from "npm:@steve02081504/virtual-console";'); // works
+await async_eval('import { VirtualConsole } from "@steve02081504/virtual-console";');     // fails
+```
+
+**`npm:` import**
+
+When loading via Deno's `npm:` specifier, evaluated code runs through Node compatibility—use bare package names instead:
+
+```javascript
+import { async_eval } from 'npm:@steve02081504/async-eval';
+
+await async_eval('import { VirtualConsole } from "npm:@steve02081504/virtual-console";'); // fails
+await async_eval('import { VirtualConsole } from "@steve02081504/virtual-console";');     // works
 ```
 
 ## Usage
@@ -261,8 +278,10 @@ For cross-network payloads, serialize `outputEntries` with `LogEntry#toJSON()` a
 
 ## Environment Differences
 
-- **Node.js / Web (`main.mjs`)**: The `VirtualConsole` is imported dynamically. If the environment restricts dynamic imports, it may fail gracefully (though it is a dependency). It also uses `globalThis.trustedTypes` for security policies.
-- **Deno (`deno.mjs`)**: Uses static imports for the `VirtualConsole` to ensure compatibility with Deno's module resolution, especially when using `npm:` specifiers.
+All runtimes share a single entry point (`main.mjs`). Dependencies are loaded through thin `deps/` shims that pick the right specifier for each environment (bare imports on Node.js; `npm:` with fallback on Deno).
+
+- **Node.js / Web**: Uses bare npm package names. When `globalThis.trustedTypes` is available, script generation goes through a policy named `async-eval-policy`.
+- **Deno**: See [For Deno Users](#for-deno-users) for how import specifiers inside evaluated code differ between CDN and `npm:` entry points. Trusted Types is not used.
 
 ## Contributing
 
