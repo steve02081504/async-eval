@@ -59,6 +59,15 @@ Exit with `.exit` or Ctrl+D.
 
 Deno uses the same entry point as Node.js (`main.mjs`). Which module specifiers work inside evaluated code depends on how you import the library:
 
+| Library import | Inside `async_eval`, use | Fails with |
+|---|---|---|
+| CDN `https://` | `"npm:some-pkg"` | bare `"some-pkg"` → `Import "…" not a dependency` |
+| `npm:@steve02081504/async-eval` | bare `"some-pkg"` | `"npm:some-pkg"` → `ERR_UNSUPPORTED_ESM_URL_SCHEME` |
+
+> **Why?** `async_eval` rewrites static `import` declarations into `await import()` calls and runs them inside an `AsyncFunction`. That function inherits the module-resolution context of the library itself: CDN-loaded code resolves in native Deno style; `npm:`-loaded code routes through Node.js compatibility, which only understands bare specifiers.
+>
+> This is a known Deno limitation. See [denoland/deno#35229](https://github.com/denoland/deno/issues/35229) for background and the open request for a programmatic resolution API.
+
 **CDN import**
 
 When loading from a CDN URL, use `npm:` prefixes in code passed to `async_eval`:
@@ -67,7 +76,7 @@ When loading from a CDN URL, use `npm:` prefixes in code passed to `async_eval`:
 import { async_eval } from 'https://cdn.jsdelivr.net/gh/steve02081504/async-eval/main.mjs';
 
 await async_eval('import { VirtualConsole } from "npm:@steve02081504/virtual-console";'); // works
-await async_eval('import { VirtualConsole } from "@steve02081504/virtual-console";');     // fails
+await async_eval('import { VirtualConsole } from "@steve02081504/virtual-console";');     // fails — Import "…" not a dependency
 ```
 
 **`npm:` import**
@@ -77,9 +86,20 @@ When loading via Deno's `npm:` specifier, evaluated code runs through Node compa
 ```javascript
 import { async_eval } from 'npm:@steve02081504/async-eval';
 
-await async_eval('import { VirtualConsole } from "npm:@steve02081504/virtual-console";'); // fails
+await async_eval('import { VirtualConsole } from "npm:@steve02081504/virtual-console";'); // fails — ERR_UNSUPPORTED_ESM_URL_SCHEME
 await async_eval('import { VirtualConsole } from "@steve02081504/virtual-console";');     // works
 ```
+
+**Which should I choose?**
+
+- If the code passed to `async_eval` comes from **an LLM or another uncontrolled source** and may use `npm:`, `https:`, or `jsr:` prefixes, prefer loading via **CDN** so Deno-native specifiers work.
+- If all dependencies are on npm and you control the generated import strings, loading via **`npm:`** is simpler.
+
+**Heads-up: same-process cross-contamination**
+
+If you load the library both ways in a single Deno process (e.g. in a test suite), earlier resolutions can affect later ones and produce misleading results. Always test each loading path in an **isolated process** (`deno run` invocation).
+
+> Verified on Deno 2.8.2.
 
 ## Usage
 
