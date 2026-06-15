@@ -4,3 +4,4 @@
 .gitignore
 .npmignore
 test/
+/deno.json
