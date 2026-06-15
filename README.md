@@ -14,6 +14,7 @@
 - **Asynchronous Evaluation**: Evaluates code without blocking the main thread using `AsyncFunction`.
 - **ESM Import Support**: Automatically transforms static `import` statements into dynamic `await import()` expressions, supporting default, named, and namespace imports.
 - **Implicit Return**: Automatically returns the value of the last expression or variable declaration, similar to a browser's developer console.
+- **Completion Values**: Control-flow statements yield their value just like `eval` — `if (1) { 2 } else { 3 }` returns `2`, and `for`/`while`/`do…while`/`switch`/`try` follow the same "last non-empty completion value" semantics.
 - **Virtual Console**: Captures all `console` output (`log`, `warn`, `error`, `info`, etc.) and exposes structured [`LogEntry`](https://github.com/steve02081504/virtual-console#results-api) objects, plus aggregated plain-text (`output`) and HTML (`outputHtml`) views—derived from entries on access—with ANSI color and `%c` styling support.
 - **Trusted Types Support**: Utilizes `trustedTypes` (if available) to create script policies, making it friendlier for environments with strict Content Security Policies (CSP).
 - **Argument Injection**: Bindings from the second argument are available in evaluated code.
@@ -140,6 +141,18 @@ async function run() {
 }
 
 run();
+```
+
+### Completion Values
+
+Like `eval`, the value of a trailing control-flow statement becomes the result, following ECMAScript's completion-value semantics:
+
+```javascript
+(await async_eval('if (1) { 2 } else { 3 }')).result            // -> 2
+(await async_eval('for (let i = 0; i < 3; i++) { i }')).result  // -> 2
+(await async_eval('switch (2) { case 1: 1; case 2: 2 }')).result // -> 2
+(await async_eval('try { 2 } finally { 3 }')).result            // -> 2 (finally value discarded)
+(await async_eval('while (false) { 1 }')).result                // -> undefined
 ```
 
 ### Using Imports

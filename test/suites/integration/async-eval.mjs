@@ -123,6 +123,74 @@ async function testImplicitReturn() {
 }
 
 /**
+ * 验证控制流语句的 completion value 语义，与原生 `eval` 对齐。
+ *
+ * `eval('if(1){2}else{3}')` 得到 `2`，循环/`switch`/`try` 等也有类似的「最后一个非空完成值」
+ * 语义。async_eval 通过 AST 插桩复现这一行为。
+ *
+ * @returns {Promise<void>}
+ */
+async function testControlFlowCompletion() {
+	console.log('\n=== [completion value · if] ===')
+
+	await runEvalCases([
+		{ label: 'if 真分支取块内末值', code: 'if(1){2}else{3}', result: 2 },
+		{ label: 'if 假分支取 else 块内末值', code: 'if(0){2}else{3}', result: 3 },
+		{ label: 'if 无 else 且条件为假返回 undefined', code: 'if(0){2}', result: undefined },
+		{ label: 'if 真分支为空块返回 undefined', code: 'if(1){}', result: undefined },
+		{ label: 'if 无花括号单语句分支', code: 'if(1) 7', result: 7 },
+		{ label: '嵌套 if 取内层分支末值', code: 'if(1){if(0){1}else{2}}', result: 2 },
+		{ label: '悬垂 if（内层条件为假）返回 undefined', code: 'if(1) if(0) 1', result: undefined },
+		{ label: 'if 内显式 return 优先生效', code: 'if(1){return 5}', result: 5 },
+	])
+
+	console.log('\n=== [completion value · 循环] ===')
+
+	await runEvalCases([
+		{ label: 'for 取最后一次迭代体的值', code: 'for(let i=0;i<3;i++){i}', result: 2 },
+		{ label: 'for 无花括号循环体', code: 'for(let i=0;i<3;i++) i', result: 2 },
+		{ label: 'for 零次迭代返回 undefined', code: 'for(let i=0;i<0;i++) i', result: undefined },
+		{ label: 'for…of 取最后一次迭代的值', code: 'for(const x of [1,2,3]) x', result: 3 },
+		{ label: 'for…in 取最后一个键', code: 'for(let k in {a:1,b:2}) k', result: 'b' },
+		{ label: 'while 零次迭代返回 undefined', code: 'while(false) 1', result: undefined },
+		{ label: 'while 多次迭代后取分号前末值', code: 'let n=0; while(n<3){n++}; n', result: 3 },
+		{ label: 'do…while 至少执行一次取体内值', code: 'do{7}while(false)', result: 7 },
+		{ label: 'continue 跳过的迭代不计入完成值', code: 'for(let i=0;i<3;i++){ i; if(i===1) continue; i*10 }', result: 20 },
+		{ label: 'continue 出现在末次迭代使完成值回退为 undefined', code: 'for(let i=0;i<2;i++){ i*10; if(i===1) continue }', result: undefined },
+		{ label: '带标签的 continue 仍正确求值', code: 'foo: for(let i=0;i<3;i++){ if(i===1) continue foo; i }', result: 2 },
+	])
+
+	console.log('\n=== [completion value · switch] ===')
+
+	await runEvalCases([
+		{ label: 'switch 命中后贯穿取最后子句值', code: 'switch(2){case 1: 1; case 2: 2}', result: 2 },
+		{ label: 'switch 命中后 break 取该子句值', code: 'switch(2){case 1: 1; break; case 2: 2}', result: 2 },
+		{ label: 'switch 命中首个子句并 break', code: 'switch(1){case 1: 1; break; default: 2}', result: 1 },
+		{ label: 'switch 落入 default 子句', code: 'switch(5){default: 8}', result: 8 },
+		{ label: 'switch 无命中且无 default 返回 undefined', code: 'switch(99){case 1: 1}', result: undefined },
+	])
+
+	console.log('\n=== [completion value · try/catch/finally] ===')
+
+	await runEvalCases([
+		{ label: 'try 正常完成取 try 块末值', code: 'try{2}catch{3}', result: 2 },
+		{ label: 'try 抛错由 catch 块接管取其末值', code: 'try{throw 1}catch(e){2}', result: 2 },
+		{ label: 'finally 的正常完成值被丢弃', code: 'try{2}finally{3}', result: 2 },
+		{ label: 'finally 不覆盖 try 块的完成值', code: 'try{1}finally{}', result: 1 },
+		{ label: 'try 块为空时 finally 值仍被丢弃返回 undefined', code: 'try{}finally{9}', result: undefined },
+	])
+
+	console.log('\n=== [completion value · 空完成值的延续] ===')
+
+	await runEvalCases([
+		{ label: '条件为假的 if 产出 undefined 覆盖前值', code: '1; if(0){2}', result: undefined },
+		{ label: '仅含声明的块为空完成值不覆盖前值', code: '9; { let y = 2 }', result: 9 },
+		{ label: '零次循环产出 undefined 覆盖前值', code: '1; while(false){2}', result: undefined },
+		{ label: '裸块取块内末值', code: '{ 2 }', result: 2 },
+	])
+}
+
+/**
  * 验证尾随对象字面量中出现花括号字符时仍应可被识别并隐式返回。
  *
  * 这些输入在真实代码里是常见合法写法（字符串、模板串、计算属性、正则都可能含花括号），
@@ -383,6 +451,7 @@ async function testExportSyntax() {
 export async function runAsyncEvalTests() {
 	await runTestGroup('async-eval 求值与输出', [
 		testImplicitReturn,
+		testControlFlowCompletion,
 		testTrailingObjectLiteralBraceCharacters,
 		testAwaitAndArgs,
 		testConsoleCapture,
