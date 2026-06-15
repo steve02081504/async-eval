@@ -14,49 +14,160 @@ function quietConsole(overrides = {}) {
 }
 
 /**
- * 验证表达式与变量声明的隐式 return。
+ * 在静默控制台下执行 `async_eval`。
+ *
+ * @param {string} code - 待求值代码。
+ * @param {object} [args={}] - 额外注入参数（`console` 由本函数提供）。
+ * @returns {Promise<import('../../../lib/eval_result.mjs').EvalResult>}
+ */
+async function evalCode(code, args = {}) {
+	return async_eval(code, { console: quietConsole(), ...args })
+}
+
+/**
+ * 断言求值成功且 `result` 严格等于期望值（单条断言）。
+ *
+ * @param {object} options - 用例选项。
+ * @param {string} options.label - 用例说明。
+ * @param {string} options.code - 待求值代码。
+ * @param {unknown} options.result - 期望的 `result`。
+ * @param {object} [options.args] - 额外注入参数。
+ * @returns {Promise<void>}
+ */
+async function assertEvalResult({ label, code, result, args }) {
+	const evalResult = await evalCode(code, args)
+	if (evalResult.error !== undefined) {
+		assertEqual(evalResult.error, undefined, label)
+		return
+	}
+	assertEqual(evalResult.result, result, label)
+}
+
+/**
+ * 断言求值成功且 `result` 与期望值 JSON 序列化后相等（单条断言）。
+ *
+ * @param {object} options - 用例选项。
+ * @param {string} options.label - 用例说明。
+ * @param {string} options.code - 待求值代码。
+ * @param {unknown} options.result - 期望的 `result`。
+ * @returns {Promise<void>}
+ */
+async function assertEvalJson({ label, code, result }) {
+	const evalResult = await evalCode(code)
+	if (evalResult.error !== undefined) {
+		assertEqual(evalResult.error, undefined, label)
+		return
+	}
+	assertEqual(JSON.stringify(evalResult.result), JSON.stringify(result), label)
+}
+
+/**
+ * 批量运行表驱动用例。
+ *
+ * @param {Array<{ label: string, code: string, result: unknown, args?: object }>} cases - 用例列表。
+ * @returns {Promise<void>}
+ */
+async function runEvalCases(cases) {
+	for (const testCase of cases)
+		await assertEvalResult(testCase)
+}
+
+/**
+ * 验证隐式 return：表达式、变量声明、对象字面量、括号包裹表达式与末尾多余分号。
  *
  * @returns {Promise<void>}
  */
 async function testImplicitReturn() {
-	console.log('\n=== [隐式 return] ===')
+	console.log('\n=== [隐式 return · 基础] ===')
 
-	const expr = await async_eval('1 + 2', { console: quietConsole() })
+	const expr = await evalCode('1 + 2')
 	assertEqual(expr.result, 3, '表达式隐式返回计算结果')
 	assert(expr instanceof EvalResult, '返回 EvalResult 实例')
 
-	const decl = await async_eval('const a = 5;\nconst b = 10;\nb;', { console: quietConsole() })
+	const decl = await evalCode('const a = 5;\nconst b = 10;\nb;')
 	assertEqual(decl.result, 10, '最后一条变量声明隐式返回变量值')
 
-	const explicit = await async_eval('return 99;', { console: quietConsole() })
+	const explicit = await evalCode('return 99;')
 	assertEqual(explicit.result, 99, '显式 return 仍然有效')
 
-	const objectLiteral = await async_eval('{a:{}}', { console: quietConsole() })
-	assertEqual(JSON.stringify(objectLiteral.result), JSON.stringify({ a: {} }), '顶层 {a:{}} 解析为对象字面量而非块语句')
+	const trailingSemicolons = await evalCode('5;;;')
+	assertEqual(trailingSemicolons.result, 5, '末尾多余分号不丢失前一个表达式的值')
 
-	const commentedObjectLiteral = await async_eval('/*a*/{a:{}}', { console: quietConsole() })
-	assertEqual(JSON.stringify(commentedObjectLiteral.result), JSON.stringify({ a: {} }), '前导注释后的对象字面量仍可隐式返回')
+	console.log('\n=== [隐式 return · 对象字面量] ===')
 
-	const trailingObjectLiteral = await async_eval('1;{a:{}}', { console: quietConsole() })
-	assertEqual(JSON.stringify(trailingObjectLiteral.result), JSON.stringify({ a: {} }), '多语句时最后一条对象字面量仍可隐式返回')
+	for (const { label, code, result } of [
+		// 单层 {a:{}} 能直接 parse 成功，走的是常规 parse 后的对象字面量识别。
+		{ label: '前导注释后的对象字面量识别为对象而非块语句', code: '/*a*/{a:{}}', result: { a: {} } },
+		// 同名嵌套键令常规 parse 抛错（重复 label），强制走语句切分回退路径。
+		{ label: '回退路径下嵌套对象字面量解析为对象', code: '{a:{a:{}}}', result: { a: { a: {} } } },
+		{ label: '回退路径下多语句末尾对象字面量仍可隐式返回', code: '1;{a:{a:{}}}', result: { a: { a: {} } } },
+		// 末尾对象前还有非表达式语句，触发 extractTrailingObjectLiteral 的前缀拆分。
+		{ label: 'try/catch 后无分号的尾随对象字面量可隐式返回', code: 'let x = 1;\ntry { x = 2 } catch {}\n{ a: { a: x } }', result: { a: { a: 2 } } },
+		// 字符串里的 `;`/`}` 与注释里的 `;` 都不应干扰顶层语句切分。
+		{ label: '字符串与注释内的分号、花括号不干扰语句切分', code: "/*;*/1;{a:{a:[1,'};']}}", result: { a: { a: [1, '};'] } } },
+	])
+		await assertEvalJson({ label, code, result })
 
-	const nestedInput = '{a:{a:{a:{a:{a:{a:{a:{a:{a:{a:{a:{}}}}}}}}}}}}'
-	const nestedDepth = (nestedInput.match(/a:/g) ?? []).length
-	let nestedExpected = {}
-	for (let i = 0; i < nestedDepth; i++)
-		nestedExpected = { a: nestedExpected }
-	const nestedObjectLiteral = await async_eval(nestedInput, { console: quietConsole() })
-	assertEqual(JSON.stringify(nestedObjectLiteral.result), JSON.stringify(nestedExpected), '深层嵌套 {a:{a:...}} 解析为对象字面量')
+	console.log('\n=== [隐式 return · 括号表达式] ===')
 
-	const trailingNestedObjectLiteral = await async_eval('1;{a:{a:{}}}', { console: quietConsole() })
-	assertEqual(JSON.stringify(trailingNestedObjectLiteral.result), JSON.stringify({ a: { a: {} } }), '多语句时深层嵌套对象字面量仍可隐式返回')
+	// acorn 解析括号包裹表达式时节点 end 落在右括号前，残留的 `)` 须被当作 trivia。
+	await assertEvalJson({ label: '括号包裹的对象字面量隐式返回', code: '({ a: 1 })', result: { a: 1 } })
+	await assertEvalResult({ label: '括号包裹的单值表达式隐式返回', code: '(42)', result: 42 })
+	await assertEvalResult({ label: '括号包裹的逗号表达式返回最后一项', code: '(1, 2, 3)', result: 3 })
+	await assertEvalResult({ label: '前有语句、末尾为括号表达式时隐式返回', code: 'let q = 1;\n(q + 1)', result: 2 })
 
-	const semicolonInString = await async_eval(
-		"await import('node:assert');/*a*/1;{a:{a:{a:{a:{a:{a:{a:{a:{a:{a:{a:[1,'}}}}}']}}}}}}}}}}}/*}*/;/*;*/",
-		{ console: quietConsole() },
-	)
-	assertEqual(semicolonInString.error, undefined, '字符串与注释内的分号不干扰语句切分')
-	assert(Array.isArray(semicolonInString.result?.a?.a?.a?.a?.a?.a?.a?.a?.a?.a?.a), '复杂末尾对象字面量可隐式返回')
+	console.log('\n=== [隐式 return · 解构] ===')
+
+	await assertEvalResult({ label: '末尾对象解构声明返回最后一个绑定值', code: 'const {a} = {a: 1}', result: 1 })
+	await assertEvalResult({ label: '末尾数组解构声明返回最后一个绑定值', code: 'const [a,b] = [1,2]', result: 2 })
+}
+
+/**
+ * 验证尾随对象字面量中出现花括号字符时仍应可被识别并隐式返回。
+ *
+ * 这些输入在真实代码里是常见合法写法（字符串、模板串、计算属性、正则都可能含花括号），
+ * 但在当前实现下会触发回退路径的边界问题。将其纳入回归测试，便于后续修复时验证。
+ *
+ * @returns {Promise<void>}
+ */
+async function testTrailingObjectLiteralBraceCharacters() {
+	console.log('\n=== [隐式 return · 花括号字符边界] ===')
+
+	await assertEvalJson({
+		label: 'try/catch 后尾随对象字面量支持字符串右花括号',
+		code: 'let x = 1;\ntry {} catch {}\n{ a: "}", b: x }',
+		result: { a: '}', b: 1 },
+	})
+
+	await assertEvalJson({
+		label: 'try/catch 后尾随对象字面量支持字符串左花括号',
+		code: 'let x = 1;\ntry {} catch {}\n{ a: "{", b: x }',
+		result: { a: '{', b: 1 },
+	})
+
+	await assertEvalJson({
+		label: 'try/catch 后尾随对象字面量支持模板字符串花括号',
+		code: 'let x = 1;\ntry {} catch {}\n{ a: `}`, b: x }',
+		result: { a: '}', b: 1 },
+	})
+
+	await assertEvalJson({
+		label: 'try/catch 后尾随对象字面量支持模板表达式后接右花括号',
+		code: 'let x = 1;\ntry {} catch {}\n{ a: `${x}}`, b: x }',
+		result: { a: '1}', b: 1 },
+	})
+
+	await assertEvalJson({
+		label: 'try/catch 后尾随对象字面量支持计算属性里的右花括号',
+		code: 'let x = 1;\ntry {} catch {}\n{ ["}"]: 1, b: x }',
+		result: { '}': 1, b: 1 },
+	})
+
+	await assertEvalJson({
+		label: 'try/catch 后尾随对象字面量支持正则中的右花括号',
+		code: 'let x = 1;\ntry {} catch {}\n{ a: /\\}/.test("}"), b: x }',
+		result: { a: true, b: 1 },
+	})
 }
 
 /**
@@ -67,8 +178,7 @@ async function testImplicitReturn() {
 async function testAwaitAndArgs() {
 	console.log('\n=== [顶层 await 与参数注入] ===')
 
-	const awaited = await async_eval('await Promise.resolve(42)', { console: quietConsole() })
-	assertEqual(awaited.result, 42, '顶层 await 可求值')
+	await assertEvalResult({ label: '顶层 await 可求值', code: 'await Promise.resolve(42)', result: 42 })
 
 	/**
 	 * @param {number} val - 注入到求值代码中的操作数。
@@ -76,14 +186,12 @@ async function testAwaitAndArgs() {
 	 */
 	const double = val => val * 2
 
-	const injected = await async_eval('x * y + helper(z)', {
-		console: quietConsole(),
-		x: 10,
-		y: 5,
-		z: 2,
-		helper: double,
+	await assertEvalResult({
+		label: '注入变量与函数可用',
+		code: 'x * y + helper(z)',
+		result: 54,
+		args: { x: 10, y: 5, z: 2, helper: double },
 	})
-	assertEqual(injected.result, 54, '注入变量与函数可用')
 }
 
 /**
@@ -99,7 +207,7 @@ console.log('hello');
 console.warn('slow path');
 42;
 `
-	const evalResult = await async_eval(code, { console: quietConsole() })
+	const evalResult = await evalCode(code)
 
 	assertEqual(evalResult.result, 42, '求值结果正确')
 	assertEqual(evalResult.outputEntries.length, 2, '捕获两条日志')
@@ -130,31 +238,49 @@ async function testPerEvalOutputSnapshot() {
 }
 
 /**
- * 验证静态 import 语句被转换为动态 import。
+ * 验证静态 import 语句被转换为动态 import（含命名、命名空间、副作用与 import attributes）。
  *
  * @returns {Promise<void>}
  */
 async function testImportTransformation() {
 	console.log('\n=== [import 转换] ===')
 
-	const named = await async_eval(`\
+	const named = await evalCode(`\
 import { sep } from 'path';
 sep;
-`, { console: quietConsole() })
+`)
 	assert(typeof named.result === 'string', '命名导入 path.sep 为字符串')
 	assert(named.result.length, 'path.sep 非空')
 
-	const namespace = await async_eval(`\
-import * as url from 'url';
-typeof url.fileURLToPath;
-`, { console: quietConsole() })
-	assertEqual(namespace.result, 'function', '命名空间导入可用')
+	await assertEvalResult({
+		label: '命名空间导入可用',
+		code: `import * as url from 'url';\ntypeof url.fileURLToPath`,
+		result: 'function',
+	})
 
-	const sideEffect = await async_eval(`\
-import 'node:assert';
-'ok';
-`, { console: quietConsole() })
-	assertEqual(sideEffect.result, 'ok', '副作用 import 不阻断求值')
+	await assertEvalResult({
+		label: '副作用 import 不阻断求值',
+		code: `import 'node:assert';\n'ok'`,
+		result: 'ok',
+	})
+
+	await assertEvalResult({
+		label: '默认+命名空间混合导入的默认绑定不丢失',
+		code: "import os, * as osAll from 'node:os';\ntypeof os.platform",
+		result: 'function',
+	})
+
+	// import attributes（`with { type: 'json' }`）须随动态 import 一并保留，否则 JSON 模块加载失败。
+	const jsonUrl = 'data:application/json,' + encodeURIComponent('{"v":5}')
+	const withAttributes = await evalCode(
+		`import data from ${JSON.stringify(jsonUrl)} with { type: 'json' }\ndata.v`,
+	)
+	assert(withAttributes.error === undefined, '带 import attributes 的 JSON 模块导入不报错')
+	assertEqual(withAttributes.result, 5, 'import attributes 被保留以正确加载 JSON 模块')
+
+	const importMeta = await evalCode('import.meta.url')
+	assert(importMeta.error === undefined, 'import.meta 改写后 import.meta.url 可用')
+	assertEqual(typeof importMeta.result, 'string', 'import.meta.url 为字符串')
 }
 
 /**
@@ -165,14 +291,88 @@ import 'node:assert';
 async function testErrors() {
 	console.log('\n=== [错误处理] ===')
 
-	const runtime = await async_eval('throw new Error("boom")', { console: quietConsole() })
+	const runtime = await evalCode('throw new Error("boom")')
 	assert(runtime.error instanceof Error, '运行时错误捕获为 Error')
 	assertEqual(runtime.error.message, 'boom', '错误消息保留')
 	assert(runtime.result === undefined, '出错时无 result')
 
-	const syntax = await async_eval('const x = ;', { console: quietConsole() })
+	const syntax = await evalCode('const x = ;')
 	assert(syntax.error instanceof Error, '语法错误捕获为 Error')
 	assert(syntax.result === undefined, '语法错误时无 result')
+}
+
+/**
+ * 验证 export 语法剥离、声明保留与隐式返回。
+ *
+ * @returns {Promise<void>}
+ */
+async function testExportSyntax() {
+	console.log('\n=== [export · 剥离与求值] ===')
+
+	await assertEvalResult({ label: 'export default 字面量作为结果返回', code: 'export default 42', result: 42 })
+	await assertEvalResult({ label: 'export { x } 被剥离后变量仍可求值', code: 'const x = 5;\nexport { x };\nx', result: 5 })
+	await assertEvalResult({ label: 'export * from 被移除后续语句仍求值', code: "export * from 'node:os';\n'ok'", result: 'ok' })
+
+	console.log('\n=== [export · 声明隐式返回] ===')
+
+	await runEvalCases([
+		{ label: 'export const 末尾声明隐式返回值', code: 'export const x = 7', result: 7 },
+		{ label: 'export let 末尾声明隐式返回值', code: 'export let y = 8', result: 8 },
+		{ label: 'export var 末尾声明隐式返回值', code: 'export var z = 9', result: 9 },
+	])
+
+	console.log('\n=== [export · 具名声明] ===')
+
+	await assertEvalResult({
+		label: 'export function 保留可用函数绑定',
+		code: 'export function f(){ return 9 }\ntypeof f',
+		result: 'function',
+	})
+	await assertEvalResult({
+		label: 'export default function 保留函数绑定',
+		code: 'export default function f(){ return 1 }\ntypeof f',
+		result: 'function',
+	})
+	await assertEvalResult({
+		label: 'export default class 保留类绑定',
+		code: 'export default class C {}\ntypeof C',
+		result: 'function',
+	})
+
+	console.log('\n=== [export · 匿名 default 与后续语句] ===')
+
+	await runEvalCases([
+		{
+			label: '匿名 default function 后表达式仍可求值',
+			code: 'export default function () { return 1 }\n123',
+			result: 123,
+		},
+		{
+			label: '匿名 default async function 后表达式仍可求值',
+			code: 'export default async function () { return await Promise.resolve(1) }\n123',
+			result: 123,
+		},
+		{
+			label: '匿名 default generator function 后表达式仍可求值',
+			code: 'export default function* () { yield 1 }\n123',
+			result: 123,
+		},
+		{
+			label: '匿名 default class 后表达式仍可求值',
+			code: 'export default class {}\n123',
+			result: 123,
+		},
+		{
+			label: '匿名 default class（带继承）后表达式仍可求值',
+			code: 'class Base {}\nexport default class extends Base {}\n123',
+			result: 123,
+		},
+		{
+			label: '匿名 default async generator function 后表达式仍可求值',
+			code: 'export default async function* () { yield 1 }\n123',
+			result: 123,
+		},
+	])
 }
 
 /**
@@ -183,10 +383,12 @@ async function testErrors() {
 export async function runAsyncEvalTests() {
 	await runTestGroup('async-eval 求值与输出', [
 		testImplicitReturn,
+		testTrailingObjectLiteralBraceCharacters,
 		testAwaitAndArgs,
 		testConsoleCapture,
 		testPerEvalOutputSnapshot,
 		testImportTransformation,
 		testErrors,
+		testExportSyntax,
 	])
 }
