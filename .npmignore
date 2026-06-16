@@ -5,3 +5,5 @@
 .npmignore
 test/
 /deno.json
+/pages
+/.github

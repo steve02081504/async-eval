@@ -1,6 +1,6 @@
 {
 	"name": "@steve02081504/async-eval",
-	"version": "0.0.13",
+	"version": "0.0.14",
 	"description": "Asynchronously evaluates JavaScript code with support for top-level await, implicit returns, and a virtual console.",
 	"main": "main.mjs",
 	"type": "module",
@@ -15,9 +15,12 @@
 		"url": "https://github.com/steve02081504/async-eval/issues"
 	},
 	"homepage": "https://github.com/steve02081504/async-eval#readme",
+	"bin": {
+		"async-eval-repl": "bin/repl/index.mjs"
+	},
 	"scripts": {
 		"test": "node test/runner.mjs",
-		"repl": "node scripts/repl.mjs"
+		"repl": "node bin/repl/index.mjs"
 	},
 	"dependencies": {
 		"acorn": "latest",
@@ -25,5 +28,8 @@
 		"astring": "latest",
 		"estree-walker": "latest",
 		"@steve02081504/virtual-console": "latest"
+	},
+	"devDependencies": {
+		"cli-highlight": "latest"
 	}
 }

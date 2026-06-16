@@ -18,7 +18,7 @@ function quietConsole(overrides = {}) {
  *
  * @param {string} code - 待求值代码。
  * @param {object} [args={}] - 额外注入参数（`console` 由本函数提供）。
- * @returns {Promise<import('../../../lib/eval_result.mjs').EvalResult>}
+ * @returns {Promise<import('../../../lib/eval_result.mjs').EvalResult>} `async_eval` 返回值。
  */
 async function evalCode(code, args = {}) {
 	return async_eval(code, { console: quietConsole(), ...args })
@@ -104,7 +104,7 @@ async function testImplicitReturn() {
 		// 末尾对象前还有非表达式语句，触发 extractTrailingObjectLiteral 的前缀拆分。
 		{ label: 'try/catch 后无分号的尾随对象字面量可隐式返回', code: 'let x = 1;\ntry { x = 2 } catch {}\n{ a: { a: x } }', result: { a: { a: 2 } } },
 		// 字符串里的 `;`/`}` 与注释里的 `;` 都不应干扰顶层语句切分。
-		{ label: '字符串与注释内的分号、花括号不干扰语句切分', code: "/*;*/1;{a:{a:[1,'};']}}", result: { a: { a: [1, '};'] } } },
+		{ label: '字符串与注释内的分号、花括号不干扰语句切分', code: '/*;*/1;{a:{a:[1,\'};\']}}', result: { a: { a: [1, '};'] } } },
 	])
 		await assertEvalJson({ label, code, result })
 
@@ -322,19 +322,19 @@ sep;
 
 	await assertEvalResult({
 		label: '命名空间导入可用',
-		code: `import * as url from 'url';\ntypeof url.fileURLToPath`,
+		code: 'import * as url from \'url\';\ntypeof url.fileURLToPath',
 		result: 'function',
 	})
 
 	await assertEvalResult({
 		label: '副作用 import 不阻断求值',
-		code: `import 'node:assert';\n'ok'`,
+		code: 'import \'node:assert\';\n\'ok\'',
 		result: 'ok',
 	})
 
 	await assertEvalResult({
 		label: '默认+命名空间混合导入的默认绑定不丢失',
-		code: "import os, * as osAll from 'node:os';\ntypeof os.platform",
+		code: 'import os, * as osAll from \'node:os\';\ntypeof os.platform',
 		result: 'function',
 	})
 
@@ -379,7 +379,7 @@ async function testExportSyntax() {
 
 	await assertEvalResult({ label: 'export default 字面量作为结果返回', code: 'export default 42', result: 42 })
 	await assertEvalResult({ label: 'export { x } 被剥离后变量仍可求值', code: 'const x = 5;\nexport { x };\nx', result: 5 })
-	await assertEvalResult({ label: 'export * from 被移除后续语句仍求值', code: "export * from 'node:os';\n'ok'", result: 'ok' })
+	await assertEvalResult({ label: 'export * from 被移除后续语句仍求值', code: 'export * from \'node:os\';\n\'ok\'', result: 'ok' })
 
 	console.log('\n=== [export · 声明隐式返回] ===')
 

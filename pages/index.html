@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="darkreader-lock">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta name="description" content="Try async-eval in your browser — async JavaScript evaluation with virtual console capture.">
+	<title>async-eval</title>
+	<link href="https://cdn.jsdelivr.net/npm/daisyui/daisyui.css" rel="stylesheet" type="text/css" crossorigin="anonymous" />
+	<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4" crossorigin="anonymous"></script>
+	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm/css/xterm.min.css">
+	<link rel="stylesheet" href="./index.css" type="text/css" />
+	<style>
+		.active-ui {
+			transform: translateX(0);
+			opacity: 1;
+			z-index: 10;
+		}
+
+		.inactive-ui {
+			transform: translateX(-100%);
+			opacity: 0;
+			z-index: 0;
+			pointer-events: none;
+		}
+
+		#terminal-ui.inactive-ui {
+			transform: translateX(100%);
+		}
+
+		#modern-ui .log-container {
+			height: min(70vh, 32rem);
+		}
+
+		#terminal-ui .mockup-code {
+			height: min(70vh, 32rem);
+		}
+	</style>
+</head>
+
+<body class="bg-base-200 min-h-screen flex flex-col items-center p-4 overflow-x-hidden">
+	<h1 class="text-3xl font-semibold mb-2">async-eval</h1>
+	<p class="text-sm opacity-70 mb-4 text-center max-w-lg">
+		Code runs entirely in your browser. Do not evaluate untrusted input.
+	</p>
+
+	<div class="form-control mb-4">
+		<label class="label cursor-pointer gap-3">
+			<span class="label-text">Modern UI</span>
+			<label class="toggle text-base-content">
+				<input type="checkbox" id="ui-toggle" />
+			</label>
+			<span class="label-text">Terminal UI</span>
+		</label>
+	</div>
+
+	<div class="ui-container relative w-full max-w-3xl overflow-hidden" style="min-height: min(70vh, 32rem);">
+		<div id="modern-ui" class="absolute top-0 left-0 w-full h-full card bg-base-100 shadow-xl transition-all duration-500 ease-in-out active-ui">
+			<div class="card-body flex flex-col h-full p-3 gap-0 min-h-0">
+				<div class="rounded-box border border-base-300 overflow-hidden flex flex-col flex-1 min-h-0 bg-base-100 log-container">
+					<div id="log-toolbar-container" class="flex-shrink-0"></div>
+					<div id="log-list" class="flex-1 min-h-0 overflow-auto"></div>
+					<div id="repl-panel" class="repl-panel"></div>
+				</div>
+			</div>
+		</div>
+
+		<div id="terminal-ui" class="absolute top-0 w-full h-full mockup-code border transition-all duration-500 ease-in-out inactive-ui bg-base-100">
+			<div id="terminal-container" class="overflow-hidden h-full p-1"></div>
+		</div>
+	</div>
+
+	<div class="text-sm mt-4">
+		github: <a target="_blank" rel="noopener noreferrer" class="link" href="https://github.com/steve02081504/async-eval">steve02081504/async-eval</a>
+	</div>
+
+	<script>
+		/**
+		 * Sync daisyUI theme with the system color scheme preference.
+		 * @param {boolean} isDark Whether dark mode is active.
+		 */
+		const updateTheme = isDark => { document.documentElement.dataset.theme = isDark ? 'dark' : 'light' }
+		window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', ({ matches }) => updateTheme(matches))
+		updateTheme(window.matchMedia('(prefers-color-scheme: dark)').matches)
+	</script>
+	<script type="module" src="./index.mjs"></script>
+</body>
+
+</html>

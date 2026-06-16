@@ -1,13 +1,15 @@
-import { generate } from 'astring'
 import { VirtualConsole } from '@steve02081504/virtual-console'
-import { EvalResult } from './lib/eval_result.mjs'
+import { generate } from 'astring'
+
 import { parseEvalProgram, transformEvalAst } from './lib/ast.mjs'
+import { EvalResult } from './lib/eval_result.mjs'
 import { runInAsyncFunction } from './lib/eval_runner.mjs'
 import { scriptPolicy } from './lib/script_policy.mjs'
 
 // Deno 下安装原生模块解析钩子
 if (globalThis.Deno) await import('./lib/deno/register_hooks.mjs')
 
+/** 求值结果类型，从 `eval_result.mjs` 再导出。 */
 export { EvalResult } from './lib/eval_result.mjs'
 
 /**
@@ -28,7 +30,7 @@ function toVirtualConsole(console) {
  *
  * @param {string} code - 待求值的 JavaScript 代码。
  * @param {object} [args={}] - 注入求值环境的变量与 `console`。
- * @returns {Promise<import('./lib/eval_result.mjs').EvalResult>}
+ * @returns {Promise<import('./lib/eval_result.mjs').EvalResult>} 含返回值、错误与捕获输出的结果对象。
  */
 export async function async_eval(code, args = {}) {
 	try {
