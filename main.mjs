@@ -3,7 +3,7 @@ import { generate } from 'astring'
 
 import { parseEvalProgram, transformEvalAst } from './lib/ast.mjs'
 import { EvalResult } from './lib/eval_result.mjs'
-import { runInAsyncFunction } from './lib/eval_runner.mjs'
+import { runInAsyncFunction, runInFunction } from './lib/eval_runner.mjs'
 import { scriptPolicy } from './lib/script_policy.mjs'
 
 // Deno 下安装原生模块解析钩子
@@ -45,6 +45,40 @@ export async function async_eval(code, args = {}) {
 			result => ({ result }),
 			error => ({ error })
 		)
+
+		return new EvalResult({
+			...outcome,
+			outputEntries: console.outputEntries.slice(logsBeforeEval),
+		})
+	} catch (error) {
+		return new EvalResult({ error, outputEntries: [] })
+	}
+}
+
+/**
+ * 同步求值 JavaScript 代码，支持可选参数注入与虚拟控制台输出捕获。
+ *
+ * 与 {@link async_eval} 不同，本函数**不做包导入的处理**：源码中的静态 `import`、
+ * `import.meta` 等模块语法不会被改写，因此含此类语法时会作为语法错误返回。
+ * 求值同步完成并直接返回结果。
+ *
+ * @param {string} code - 待求值的 JavaScript 代码。
+ * @param {object} [args={}] - 注入求值环境的变量与 `console`。
+ * @returns {import('./lib/eval_result.mjs').EvalResult} 含返回值、错误与捕获输出的结果对象。
+ */
+export function sync_eval(code, args = {}) {
+	try {
+		const source = scriptPolicy.createScript(generate(parseEvalProgram(code)))
+
+		const console = args.console = toVirtualConsole(args.console)
+		const logsBeforeEval = console.outputEntries.length
+
+		let outcome
+		try {
+			outcome = { result: runInFunction(source, args) }
+		} catch (error) {
+			outcome = { error }
+		}
 
 		return new EvalResult({
 			...outcome,

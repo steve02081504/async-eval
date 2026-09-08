@@ -28,3 +28,15 @@ export interface AsyncEvalArgs extends Record<string, unknown> {
  * @returns 含返回值、错误与本次捕获日志的 {@link EvalResult}。
  */
 export declare function async_eval(code: string, args?: AsyncEvalArgs): Promise<EvalResult>
+
+/**
+ * 同步求值 JavaScript 代码，支持隐式 return、completion value 与虚拟控制台输出捕获。
+ *
+ * 与 {@link async_eval} 不同，本函数**不做包导入的处理**：源码中的静态 `import`、
+ * `import.meta` 等模块语法不会被改写，含此类语法时会作为语法错误返回。
+ *
+ * @param code - 待求值的 JavaScript 源码字符串。
+ * @param args - 注入求值环境的绑定与可选 `console`（默认 `{}`）。
+ * @returns 含返回值、错误与本次捕获日志的 {@link EvalResult}。
+ */
+export declare function sync_eval(code: string, args?: AsyncEvalArgs): EvalResult

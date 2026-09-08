@@ -25,6 +25,7 @@
 - **Trusted Types Support**: Utilizes `trustedTypes` (if available) to create script policies, making it friendlier for environments with strict Content Security Policies (CSP).
 - **Argument Injection**: Bindings from the second argument are available in evaluated code.
 - **Scope Isolation**: Evaluated code runs in an `AsyncFunction`, so top-level `var` / `let` / `const` bindings stay function-scoped and do not attach to `globalThis`. Pass state via `args` (or `args.x = …` in the REPL) to share bindings across evaluations.
+- **Synchronous Evaluation**: `sync_eval(code, args)` evaluates code synchronously and returns an `EvalResult` directly. Unlike `async_eval`, it does **not** transform static `import` / `import.meta` module syntax, so code containing them fails as a syntax error.
 
 ## Installation
 
@@ -111,6 +112,29 @@ if (error) {
   console.log('--- Captured Console Output (HTML) ---');
   console.log(outputHtml);
 }
+```
+
+### Synchronous Evaluation
+
+`sync_eval(code, args)` runs synchronously and returns an `EvalResult` directly (no `await`). It shares the same implicit-return, completion-value, argument-injection, and virtual-console behaviors as `async_eval`, but does **not** transform static `import` / `import.meta` module syntax — code containing them is reported as a syntax error.
+
+```javascript
+import { sync_eval } from '@steve02081504/async-eval';
+
+const { result, error, output } = sync_eval(`
+  const a = 5;
+  const b = 10;
+  a + b; // Implicit return
+`);
+console.log(result); // 15
+
+const { result: injected } = sync_eval('x * y + helper(z)', {
+  x: 10,
+  y: 5,
+  z: 2,
+  helper: (val) => val * 2,
+});
+console.log(injected); // 54
 ```
 
 ### Completion Values

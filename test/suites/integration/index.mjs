@@ -1,6 +1,7 @@
 import { passed, failed, failures, resetHarness } from '../../harness.mjs'
 
 import { runAsyncEvalTests } from './async-eval.mjs'
+import { runSyncEvalTests } from './sync-eval.mjs'
 
 /**
  * 运行全部集成测试套件并汇总结果。
@@ -9,6 +10,7 @@ export async function runAllTests() {
 	resetHarness()
 	console.log('🚀 开始运行所有测试...\n')
 	await runAsyncEvalTests()
+	runSyncEvalTests()
 
 	console.log(`\n${'='.repeat(50)}`)
 	if (failed === 0)
